@@ -1,0 +1,131 @@
+/* Cards and ID Styles */
+
+/* Student Card */
+.student-card {
+    @apply bg-white rounded-lg shadow-sm overflow-hidden max-w-sm mx-auto;
+}
+
+.card-header {
+    @apply bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 text-white;
+}
+
+.card-photo {
+    @apply w-32 h-32 rounded-full mx-auto -mt-16 border-4 border-white shadow-lg;
+}
+
+.card-body {
+    @apply px-6 py-4;
+}
+
+.card-info {
+    @apply space-y-2;
+}
+
+.info-item {
+    @apply flex justify-between;
+}
+
+.info-label {
+    @apply text-gray-500 text-sm;
+}
+
+.info-value {
+    @apply text-gray-900 font-medium;
+}
+
+.card-footer {
+    @apply px-6 py-4 bg-gray-50 border-t;
+}
+
+/* ID Card */
+.id-card {
+    @apply bg-white rounded-lg shadow-sm overflow-hidden;
+    width: 85.60mm;
+    height: 53.98mm;
+}
+
+.id-card-header {
+    @apply bg-gradient-to-r from-blue-600 to-indigo-600 p-2 text-white text-center;
+}
+
+.id-card-logo {
+    @apply w-16 h-16 mx-auto;
+}
+
+.id-card-body {
+    @apply p-3 grid grid-cols-2 gap-2 text-sm;
+}
+
+.id-card-qr {
+    @apply absolute right-2 bottom-2 w-16 h-16;
+}
+
+.id-card-footer {
+    @apply absolute bottom-0 left-0 right-0 bg-gray-800 text-white text-xs p-1 text-center;
+}
+
+/* Parent Card */
+.parent-card {
+    @apply bg-white rounded-lg shadow-sm overflow-hidden;
+}
+
+.parent-info {
+    @apply p-4 border-b;
+}
+
+.student-list {
+    @apply divide-y divide-gray-200;
+}
+
+.student-item {
+    @apply p-4 hover:bg-gray-50;
+}
+
+/* Teacher Card */
+.teacher-card {
+    @apply bg-white rounded-lg shadow-sm overflow-hidden;
+}
+
+.teacher-header {
+    @apply bg-gradient-to-r from-green-600 to-teal-600 p-4 text-white;
+}
+
+.teacher-courses {
+    @apply p-4 space-y-2;
+}
+
+.course-item {
+    @apply flex justify-between items-center p-2 hover:bg-gray-50 rounded;
+}
+
+/* Print Styles */
+@media print {
+    .id-card {
+        @apply shadow-none border border-gray-300;
+        margin: 0;
+        padding: 0;
+    }
+
+    .student-card,
+    .parent-card,
+    .teacher-card {
+        @apply shadow-none border border-gray-300;
+    }
+}
+
+/* Responsive Styles */
+@media (max-width: 640px) {
+    .student-card,
+    .parent-card,
+    .teacher-card {
+        @apply rounded-none;
+    }
+
+    .card-photo {
+        @apply w-24 h-24 -mt-12;
+    }
+
+    .id-card {
+        @apply scale-90;
+    }
+}

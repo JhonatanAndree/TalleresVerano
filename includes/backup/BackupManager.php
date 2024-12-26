@@ -1,137 +1,153 @@
 <?php
+/**
+ * Gestor de respaldos de base de datos
+ * Ruta: includes/backup/BackupManager.php
+ */
+
 class BackupManager {
     private $db;
-    private $backupPath;
     private $config;
+    private $logger;
+    private $driveService;
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
-        $this->backupPath = BASE_PATH . '/backups/';
-        $this->loadConfig();
-        $this->ensureBackupDirectory();
+        $this->config = require __DIR__ . '/../../Config/backup.php';
+        $this->logger = ActivityLogger::getInstance();
+        $this->driveService = new GoogleDriveService();
     }
 
     public function createBackup() {
-        $timestamp = date('Y-m-d_H-i-s');
-        $filename = "backup_{$timestamp}.sql.enc";
-        $dump = $this->generateDump();
-        $encrypted = $this->encrypt($dump);
-        
-        file_put_contents($this->backupPath . $filename, $encrypted);
-        $this->cleanOldBackups();
-        
-        return $filename;
-    }
-
-    public function restoreBackup($filename) {
-        $this->validateBackupFile($filename);
-        $encrypted = file_get_contents($this->backupPath . $filename);
-        $sql = $this->decrypt($encrypted);
-        
         try {
-            $this->db->beginTransaction();
-            foreach (explode(';', $sql) as $statement) {
-                if (trim($statement)) {
-                    $this->db->exec($statement);
-                }
+            $filename = 'backup_' . date('Y-m-d_H-i-s') . '.sql';
+            $filepath = $this->config['backup_path'] . '/' . $filename;
+
+            // Ejecutar mysqldump
+            $command = sprintf(
+                'mysqldump --opt -h %s -u %s -p%s %s > %s',
+                escapeshellarg($this->config['db_host']),
+                escapeshellarg($this->config['db_user']),
+                escapeshellarg($this->config['db_pass']),
+                escapeshellarg($this->config['db_name']),
+                escapeshellarg($filepath)
+            );
+
+            exec($command, $output, $returnVar);
+
+            if ($returnVar !== 0) {
+                throw new Exception('Error al crear backup');
             }
-            $this->db->commit();
+
+            // Comprimir backup
+            if ($this->config['compression']) {
+                $this->compressBackup($filepath);
+                $filepath .= '.gz';
+                $filename .= '.gz';
+            }
+
+            // Subir a Google Drive
+            if ($this->config['drive_backup']) {
+                $driveFileId = $this->driveService->uploadFile($filepath, [
+                    'name' => $filename,
+                    'parents' => [$this->config['drive_folder_id']]
+                ]);
+            }
+
+            // Registrar backup
+            $this->registerBackup([
+                'filename' => $filename,
+                'filepath' => $filepath,
+                'size' => filesize($filepath),
+                'drive_file_id' => $driveFileId ?? null
+            ]);
+
+            // Limpiar backups antiguos
+            $this->cleanOldBackups();
+
+            $this->logger->info('Backup creado exitosamente', [
+                'filename' => $filename,
+                'size' => filesize($filepath)
+            ]);
+
+            return true;
+
         } catch (Exception $e) {
-            $this->db->rollBack();
-            throw new Exception('Error en restauración: ' . $e->getMessage());
+            $this->logger->error('Error creando backup', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 
-    public function getBackups() {
-        $backups = [];
-        foreach (glob($this->backupPath . '*.sql.enc') as $file) {
-            $backups[] = [
-                'filename' => basename($file),
-                'fecha' => filemtime($file),
-                'tamano' => filesize($file),
-                'estado' => $this->validateBackupIntegrity($file) ? 'success' : 'warning'
-            ];
-        }
-        return array_reverse($backups);
-    }
-
-    private function generateDump() {
-        $dump = '';
-        $tables = $this->getTables();
+    private function compressBackup($filepath) {
+        $handle = fopen($filepath, 'r');
+        $compressed = gzopen($filepath . '.gz', 'w9');
         
-        foreach ($tables as $table) {
-            $dump .= $this->getDDL($table);
-            $dump .= $this->getData($table);
+        while (!feof($handle)) {
+            gzwrite($compressed, fread($handle, 1024 * 512));
         }
         
-        return $dump;
+        fclose($handle);
+        gzclose($compressed);
+        unlink($filepath);
     }
 
-    private function encrypt($data) {
-        $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
-        $key = hash('sha256', $this->config['clave_cifrado'], true);
-        $encrypted = openssl_encrypt($data, 'aes-256-cbc', $key, 0, $iv);
-        return $iv . $encrypted;
-    }
-
-    private function decrypt($data) {
-        $ivSize = openssl_cipher_iv_length('aes-256-cbc');
-        $iv = substr($data, 0, $ivSize);
-        $encrypted = substr($data, $ivSize);
-        $key = hash('sha256', $this->config['clave_cifrado'], true);
-        return openssl_decrypt($encrypted, 'aes-256-cbc', $key, 0, $iv);
-    }
-
-    private function validateBackupIntegrity($file) {
-        try {
-            $encrypted = file_get_contents($file);
-            $decrypted = $this->decrypt($encrypted);
-            return strpos($decrypted, 'CREATE TABLE') !== false;
-        } catch (Exception $e) {
-            return false;
-        }
+    private function registerBackup($data) {
+        $sql = "INSERT INTO backups (filename, filepath, size, drive_file_id, created_at) 
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            $data['filename'],
+            $data['filepath'],
+            $data['size'],
+            $data['drive_file_id']
+        ]);
     }
 
     private function cleanOldBackups() {
-        $retention = intval($this->config['dias_retencion']);
-        foreach (glob($this->backupPath . '*.sql.enc') as $file) {
-            if (time() - filemtime($file) > $retention * 86400) {
-                unlink($file);
+        foreach (['daily', 'weekly', 'monthly'] as $type) {
+            $retention = $this->config['retention'][$type];
+            $period = $this->getRetentionPeriod($type);
+            
+            $sql = "SELECT * FROM backups 
+                    WHERE created_at < DATE_SUB(NOW(), INTERVAL ? $period) 
+                    ORDER BY created_at DESC 
+                    LIMIT ?, 999999";
+                    
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$retention, $retention]);
+            $backupsToDelete = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($backupsToDelete as $backup) {
+                $this->deleteBackup($backup);
             }
         }
     }
 
-    private function loadConfig() {
-        $stmt = $this->db->query("SELECT * FROM configuracion WHERE clave LIKE 'backup_%'");
-        $this->config = [];
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $key = str_replace('backup_', '', $row['clave']);
-            $this->config[$key] = $row['valor'];
+    private function deleteBackup($backup) {
+        // Eliminar archivo local
+        if (file_exists($backup['filepath'])) {
+            unlink($backup['filepath']);
         }
+
+        // Eliminar de Google Drive
+        if ($backup['drive_file_id']) {
+            $this->driveService->deleteFile($backup['drive_file_id']);
+        }
+
+        // Eliminar registro
+        $sql = "DELETE FROM backups WHERE id = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$backup['id']]);
     }
 
-    private function getTables() {
-        $tables = [];
-        $result = $this->db->query("SHOW TABLES");
-        while ($row = $result->fetch(PDO::FETCH_NUM)) {
-            $tables[] = $row[0];
+    private function getRetentionPeriod($type) {
+        switch ($type) {
+            case 'daily': return 'DAY';
+            case 'weekly': return 'WEEK';
+            case 'monthly': return 'MONTH';
+            default: throw new Exception('Tipo de retención inválido');
         }
-        return $tables;
-    }
-
-    private function getDDL($table) {
-        $createTable = $this->db->query("SHOW CREATE TABLE `$table`")->fetch();
-        return $createTable[1] . ";\n\n";
-    }
-
-    private function getData($table) {
-        $data = '';
-        $result = $this->db->query("SELECT * FROM `$table`");
-        while ($row = $result->fetch(PDO::FETCH_NUM)) {
-            $data .= "INSERT INTO `$table` VALUES (" . 
-                    implode(',', array_map([$this->db, 'quote'], $row)) . 
-                    ");\n";
-        }
-        return $data . "\n";
     }
 }
