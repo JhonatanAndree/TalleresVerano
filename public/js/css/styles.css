@@ -1,0 +1,125 @@
+/* Variables globales */
+:root {
+    --primary-color: #1a237e;
+    --secondary-color: #303f9f;
+    --success-color: #4caf50;
+    --warning-color: #ff9800;
+    --danger-color: #f44336;
+    --text-dark: #263238;
+    --text-light: #ffffff;
+    --background-light: #f5f5f5;
+    --border-color: #e0e0e0;
+}
+
+/* Layout Base */
+.wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+.main-content {
+    flex: 1;
+    background-color: var(--background-light);
+}
+
+/* Navbar */
+.navbar-custom {
+    background-color: var(--secondary-color);
+    padding: 0.5rem 1rem;
+}
+
+/* Tablas */
+.table-container {
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.table-custom th {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+/* Formularios */
+.form-custom label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.form-custom .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(26, 35, 126, 0.25);
+}
+
+/* Cards */
+.card-custom {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card-custom .card-header {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        position: fixed;
+        z-index: 1000;
+    }
+    
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+/* Utilidades */
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.btn-custom {
+    padding: 0.5rem 1.5rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+/* Dashboard Cards */
+.dashboard-card {
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Estados y Badges */
+.status-active {
+    background-color: var(--success-color);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+}
+
+.status-inactive {
+    background-color: var(--warning-color);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+}
